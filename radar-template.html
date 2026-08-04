@@ -197,6 +197,23 @@
   .keys-group { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); margin: 22px 0 10px; }
   .keys-group:first-of-type { margin-top: 0; }
 
+  /* ---- скелет ролика ---- */
+  .beats { border: 1px solid var(--line); background: var(--panel); }
+  .beat {
+    display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 20px;
+    padding: 16px 18px; border-bottom: 1px solid var(--line-soft);
+  }
+  .beat:last-child { border-bottom: none; }
+  .beat-time {
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+    font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 2px;
+  }
+  .beat h3 { margin: 0 0 4px; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+  .beat p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+  @media (max-width: 620px) {
+    .beat { grid-template-columns: 1fr; gap: 6px; }
+  }
+
   /* ---- шпаргалка ---- */
   .sheet { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
   .card { background: var(--panel); padding: 18px 20px 20px; }
@@ -236,8 +253,9 @@
         <li><a href="#map"><span class="n">03</span> Карта ниши</a></li>
         <li><a href="#donors"><span class="n">04</span> Доноры</a></li>
         <li><a href="#queue"><span class="n">05</span> Очередь съёмки</a></li>
-        <li><a href="#console"><span class="n">06</span> Пульт ключей</a></li>
-        <li><a href="#sheet"><span class="n">07</span> Шпаргалка</a></li>
+        <li><a href="#skeleton"><span class="n">06</span> Скелет ролика</a></li>
+        <li><a href="#console"><span class="n">07</span> Пульт ключей</a></li>
+        <li><a href="#sheet"><span class="n">08</span> Шпаргалка</a></li>
       </ol>
     </nav>
 
@@ -288,9 +306,72 @@
         <div id="ideas-wrap"></div>
       </section>
 
+      <section id="skeleton">
+        <div class="sec-head">
+          <p class="sec-kicker">06 — Как снимать</p>
+          <h2>Скелет ролика: раскрыть проблему и закрыть её</h2>
+          <p class="sec-note">Одна и та же схема для каждого выпуска. Сценарий дословно не пишется — на бумаге только шесть точек ниже. Это и держит темп: думать надо над содержанием, а не над структурой.</p>
+        </div>
+
+        <div class="beats">
+          <div class="beat">
+            <span class="beat-time">0:00 — 0:15</span>
+            <h3>Хук: назвать его проблему его словами</h3>
+            <p>Первая фраза — про зрителя, не про тебя. Ни приветствия, ни «в этом видео мы разберём». Сразу конкретика и обещание результата. На экране уже что-то происходит.</p>
+          </div>
+          <div class="beat">
+            <span class="beat-time">0:15 — 2:00</span>
+            <h3>Обострение: показать, что хуже, чем он думал</h3>
+            <p>Не мнение, а данные. Цифры с hh.ru, скриншоты вакансий, реальные суммы. Зритель должен узнать в проблеме себя и слегка испугаться.</p>
+          </div>
+          <div class="beat">
+            <span class="beat-time">2:00 — 3:30</span>
+            <h3>Ложные утешения: снять его отговорки</h3>
+            <p>«Меня не заменят, я креативный», «ИИ не понимает контекст». Проговорить вслух то, чем он себя успокаивает, и показать, почему не спасает. Здесь он перестаёт спорить и начинает слушать.</p>
+          </div>
+          <div class="beat">
+            <span class="beat-time">3:30 — 4:30</span>
+            <h3>Разворот: настоящая проблема в другом</h3>
+            <p>Переформулировка. Не «профессию отменят», а «задачи заберут по одной, и зарплата поедет вниз раньше, чем исчезнет вакансия». Ради этого поворота ролик и досматривают.</p>
+          </div>
+          <div class="beat">
+            <span class="beat-time">4:30 — 9:00</span>
+            <h3>Решение: по шагам, на экране</h3>
+            <p>Конкретика, которую видно. Не рассуждения, а действия: куда зайти, что вбить, что получится. Здесь живёт вся польза ролика.</p>
+          </div>
+          <div class="beat">
+            <span class="beat-time">9:00 — 10:00</span>
+            <h3>Первый шаг сегодня</h3>
+            <p>Одно действие на десять минут, которое зритель сделает не откладывая. Не «подписывайтесь», а «открой и проверь свою должность». Сделавший — вернётся.</p>
+          </div>
+        </div>
+
+        <div class="sheet" style="margin-top:26px">
+          <div class="card">
+            <h3>Правила скорости</h3>
+            <ul>
+              <li><b>Один заход записи.</b> Не получилось за раз — упрощай тему, а не переснимай</li>
+              <li><b>Голос поверх экрана.</b> Лицо в углу по желанию, отдельная съёмка не нужна</li>
+              <li><b>Монтаж — только вырезать паузы.</b> Ни переходов, ни эффектов</li>
+              <li><b>Данные готовятся один раз.</b> Таблица с hh.ru кормит сразу ролики 1, 2 и 4</li>
+              <li><b>10–12 минут.</b> Длиннее — дороже в производстве, короче — не раскрыть</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Чтобы не перегореть</h3>
+            <ul>
+              <li><b>Один ролик в неделю.</b> Канал умирает от остановки, а не от медленного темпа</li>
+              <li><b>Первые 10 роликов не оценивать по просмотрам.</b> Единственная метрика — вышел или нет</li>
+              <li><b>Один формат подряд 4–5 раз.</b> Метания стоят дороже всего: и монтаж медленнее, и алгоритм не понимает канал</li>
+              <li><b>Обложка — три слова и цифра.</b> Дизайн здесь не решает, решает понятность</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section id="console">
         <div class="sec-head">
-          <p class="sec-kicker">06 — Ручной прогон</p>
+          <p class="sec-kicker">07 — Ручной прогон</p>
           <h2>Пульт ключей</h2>
           <p class="sec-note">Те же ключи, что крутит автоматика. Каждая ссылка открывает выдачу YouTube уже с фильтром «за месяц» и сортировкой по просмотрам.</p>
         </div>
@@ -299,7 +380,7 @@
 
       <section id="sheet">
         <div class="sec-head">
-          <p class="sec-kicker">07 — Правила</p>
+          <p class="sec-kicker">08 — Правила</p>
           <h2>Шпаргалка</h2>
         </div>
         <div class="sheet">
