@@ -221,19 +221,29 @@
   <div class="body-grid">
     <nav class="rail" aria-label="Разделы">
       <ol>
-        <li><a href="#outliers"><span class="n">01</span> Аутлаеры</a></li>
-        <li><a href="#map"><span class="n">02</span> Карта ниши</a></li>
-        <li><a href="#donors"><span class="n">03</span> Доноры</a></li>
-        <li><a href="#queue"><span class="n">04</span> Очередь съёмки</a></li>
-        <li><a href="#console"><span class="n">05</span> Пульт ключей</a></li>
-        <li><a href="#sheet"><span class="n">06</span> Шпаргалка</a></li>
+        <li><a href="#rockets"><span class="n">01</span> Ракеты</a></li>
+        <li><a href="#outliers"><span class="n">02</span> Аутлаеры</a></li>
+        <li><a href="#map"><span class="n">03</span> Карта ниши</a></li>
+        <li><a href="#donors"><span class="n">04</span> Доноры</a></li>
+        <li><a href="#queue"><span class="n">05</span> Очередь съёмки</a></li>
+        <li><a href="#console"><span class="n">06</span> Пульт ключей</a></li>
+        <li><a href="#sheet"><span class="n">07</span> Шпаргалка</a></li>
       </ol>
     </nav>
 
     <main>
+      <section id="rockets">
+        <div class="sec-head">
+          <p class="sec-kicker">01 — Кого копировать</p>
+          <h2>Ракеты: маленькие каналы с большим охватом</h2>
+          <p class="sec-note">Главный раздел. Здесь каналы до 50 тысяч подписчиков, чьи ролики собрали кратно больше, чем канал по размеру мог бы вытянуть. На плашке — просмотров на подписчика: это отношение показывает чистую силу формата, потому что бренда у такого канала ещё нет. Именно эти ролики повторяемы без бюджета и без имени.</p>
+        </div>
+        <div class="vgrid" id="rockets-grid"></div>
+      </section>
+
       <section id="outliers">
         <div class="sec-head">
-          <p class="sec-kicker">01 — Что выстрелило</p>
+          <p class="sec-kicker">02 — Что выстрелило</p>
           <h2>Аутлаеры: видео, обогнавшие свой канал</h2>
           <p class="sec-note">Множитель — во сколько раз ролик обошёл медиану последних видео своего канала. Всё выше ×3 выстрелило форматом, а не брендом, и потому повторяемо. Каналы-конвейеры с десятком роликов в сутки отсеяны: у них низкая медиана даёт ложный множитель. Клик по карточке открывает ролик.</p>
         </div>
@@ -242,7 +252,7 @@
 
       <section id="map">
         <div class="sec-head">
-          <p class="sec-kicker">02 — Где просмотры</p>
+          <p class="sec-kicker">03 — Где просмотры</p>
           <h2>Карта ниши: потолок по углу захода</h2>
           <p class="sec-note">Максимум просмотров за последние 30 дней по каждому ключу, после отсева не по теме. Шкала логарифмическая.</p>
         </div>
@@ -251,7 +261,7 @@
 
       <section id="donors">
         <div class="sec-head">
-          <p class="sec-kicker">03 — Что копировать</p>
+          <p class="sec-kicker">04 — Что копировать</p>
           <h2>Доноры</h2>
           <p class="sec-note">Списки сгруппированы по тому, каким ключом ролик найден, а не по языку самого видео: из-за автодубляжа YouTube англоязычные каналы приходят и по русским запросам. Это же и главный риск — перевод в лоб конкурирует с оригиналом.</p>
         </div>
@@ -260,7 +270,7 @@
 
       <section id="queue">
         <div class="sec-head">
-          <p class="sec-kicker">04 — Что снимать</p>
+          <p class="sec-kicker">05 — Что снимать</p>
           <h2>Очередь съёмки</h2>
           <p class="sec-note">Подсвечены четыре ролика стартового захода — в порядке запуска. Первый даёт охват, второй его конвертит, третий и четвёртый удерживают. Этот раздел правится руками, автоматика его не трогает.</p>
         </div>
@@ -269,7 +279,7 @@
 
       <section id="console">
         <div class="sec-head">
-          <p class="sec-kicker">05 — Ручной прогон</p>
+          <p class="sec-kicker">06 — Ручной прогон</p>
           <h2>Пульт ключей</h2>
           <p class="sec-note">Те же ключи, что крутит автоматика. Каждая ссылка открывает выдачу YouTube уже с фильтром «за месяц» и сортировкой по просмотрам.</p>
         </div>
@@ -278,7 +288,7 @@
 
       <section id="sheet">
         <div class="sec-head">
-          <p class="sec-kicker">06 — Правила</p>
+          <p class="sec-kicker">07 — Правила</p>
           <h2>Шпаргалка</h2>
         </div>
         <div class="sheet">
@@ -441,38 +451,63 @@ const MONTHS = ["января","февраля","марта","апреля","м�
 
 /* --- плитки --- */
 (function () {
+  const rock = RADAR.rockets && RADAR.rockets[0];
   const top = RADAR.outliers && RADAR.outliers[0];
   const ceil = RADAR.ceilings && RADAR.ceilings[0];
-  const small = (RADAR.outliers || []).filter(o => o.subs && o.subs < 50000).length;
+  const tiers = RADAR.byTier || {};
+  const tiny = (tiers.nano || 0) + (tiers.small || 0);
   $("tiles").innerHTML = [
-    { l: "Лучший аутлаер", v: top ? mult(top.multiplier) : "—", n: top ? `${esc(top.channel)} — ${short(top.views)} просмотров` : "нет данных" },
-    { l: "Потолок ниши", v: ceil ? short(ceil.ceiling) : "—", n: ceil ? `ключ «${esc(ceil.keyword)}», за 30 дней` : "нет данных" },
-    { l: "Аутлаеров найдено", v: String((RADAR.outliers || []).length), n: `из них на каналах до 50 тыс. подписчиков: ${small}` },
-    { l: "Окно копирования", v: "13 дн", n: "от аутлаера до первой копии в рунете" }
+    { l: "Лучшая ракета",
+      v: rock && rock.viewsPerSub ? "×" + String(rock.viewsPerSub).replace(".", ",") : "—",
+      n: rock ? `${esc(rock.channel)} — ${short(rock.subs)} подписчиков, ${short(rock.views)} просмотров` : "нет данных" },
+    { l: "Лучший аутлаер",
+      v: top ? mult(top.multiplier) : "—",
+      n: top ? `${esc(top.channel)} — ${short(top.views)} просмотров` : "нет данных" },
+    { l: "Просмотрено роликов",
+      v: RADAR.videosScanned ? nf(RADAR.videosScanned) : "—",
+      n: `в разбор попал ${nf(RADAR.videosKept || 0)}, из них на малых каналах ${tiny}` },
+    { l: "Потолок ниши",
+      v: ceil ? short(ceil.ceiling) : "—",
+      n: ceil ? `ключ «${esc(ceil.keyword)}», за 30 дней` : "нет данных" }
   ].map(t => '<div class="tile"><span class="tile-label">' + t.l + '</span><span class="tile-value">' + t.v +
     '</span><span class="tile-note">' + t.n + '</span></div>').join("");
 })();
 
-/* --- карточка видео --- */
-function vcard(o) {
+/* --- карточка видео. mode: "rocket" — на плашке просмотры на подписчика, "outlier" — множитель --- */
+function vcard(o, mode) {
   const img = o.thumb
     ? '<img src="' + o.thumb + '" alt="" loading="lazy">'
     : '';
-  const badge = o.multiplier ? '<span class="badge">' + mult(o.multiplier) + '</span>' : '';
+  const head = mode === "rocket"
+    ? (o.viewsPerSub ? '×' + String(o.viewsPerSub).replace(".", ",") : null)
+    : (o.multiplier ? mult(o.multiplier) : null);
+  const badge = head ? '<span class="badge">' + head + '</span>' : '';
+
+  const stats = ['<span><b>' + nf(o.views) + '</b> просмотров</span>'];
+  if (mode === "rocket") {
+    if (o.multiplier) stats.push('<span>множитель ' + mult(o.multiplier) + '</span>');
+  } else if (o.viewsPerSub) {
+    stats.push('<span>' + String(o.viewsPerSub).replace(".", ",") + ' просм/подп</span>');
+  }
+  if (o.channelMedian) stats.push('<span>медиана ' + short(o.channelMedian) + '</span>');
+
   return '<a class="vcard" href="' + esc(o.url) + '" target="_blank" rel="noopener noreferrer">' +
     '<div class="vthumb">' + img + badge + '<span class="age">' + esc(days(o.ageDays)) + '</span></div>' +
     '<div class="vbody">' +
       '<p class="vtitle">' + esc(o.titleRu || o.title) + '</p>' +
       (o.titleRu ? '<span class="vorig">' + esc(o.title) + '</span>' : '') +
       '<span class="vchan">' + esc(o.channel) + ' · ' + short(o.subs) + ' подписчиков</span>' +
-      '<span class="vstats"><span><b>' + nf(o.views) + '</b> просмотров</span>' +
-      (o.channelMedian ? '<span>медиана ' + short(o.channelMedian) + '</span>' : '') +
-      '</span>' +
+      '<span class="vstats">' + stats.join("") + '</span>' +
     '</div></a>';
 }
 
+$("rockets-grid").innerHTML = (RADAR.rockets || []).length
+  ? RADAR.rockets.map(o => vcard(o, "rocket")).join("")
+  : '<div class="vcard"><div class="vbody"><p class="vtitle">Ракет в этом прогоне не найдено</p>' +
+    '<span class="vchan">Ни один маленький канал не собрал охват, кратно превышающий свой размер.</span></div></div>';
+
 $("outliers-grid").innerHTML = (RADAR.outliers || []).length
-  ? RADAR.outliers.map(vcard).join("")
+  ? RADAR.outliers.map(o => vcard(o, "outlier")).join("")
   : '<div class="vcard"><div class="vbody"><p class="vtitle">Аутлаеров в этом прогоне не найдено</p>' +
     '<span class="vchan">Ни один ролик не обошёл медиану своего канала больше чем в три раза.</span></div></div>';
 

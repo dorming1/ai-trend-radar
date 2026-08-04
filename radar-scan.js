@@ -4,14 +4,14 @@
  *
  * Запуск:  YT_API_KEY=AIza... node radar-scan.js > radar-data.json
  *
- * Что делает:
- *   1. По каждому ключу берёт топ роликов за последние 30 дней (сортировка по просмотрам).
- *   2. Тянет просмотры ролика, подписчиков канала и последние 10 роликов канала.
- *   3. Считает множитель = просмотры / медиана канала.
- *   4. Выдаёт JSON: аутлаеры, потолки по ключам, сырые кандидаты.
+ * Глубокий режим: по каждому ключу берётся до 50 роликов в двух сортировках —
+ * по просмотрам и по дате. Сортировка по просмотрам поднимает крупные каналы,
+ * поэтому одной её мало: свежие ролики маленьких каналов видно только по дате.
  *
- * Квота: search.list = 100 единиц за ключ. 10 ключей ≈ 1000 + ~250 на статистику.
- * Бесплатный лимит — 10 000 единиц в сутки.
+ * Экономия квоты. Поиск стоит 100 единиц независимо от числа результатов,
+ * поэтому берём максимум. Размер канала узнаём пачками по 50 (1 единица),
+ * а дорогой запрос за медианой тратим только на каналы до MAX_SUBS_FOR_PROFILE
+ * и не больше MAX_PROFILES штук за прогон.
  */
 
 const API = "https://www.googleapis.com/youtube/v3";
@@ -22,27 +22,51 @@ if (!KEY) {
   process.exit(2);
 }
 
-const KEYWORDS = [
-  { q: "ии заменит профессии",        lang: "ru", region: "RU", angle: "«ИИ заменит профессии» — страх за работу" },
-  { q: "как зарабатывать с помощью ии", lang: "ru", region: "RU", angle: "«Как зарабатывать с помощью ИИ» — путь до сервиса" },
-  { q: "заработок в интернете",        lang: "ru", region: "RU", angle: "Заработок в интернете — общий денежный запрос" },
-  { q: "ии агенты",                    lang: "ru", region: "RU", angle: "ИИ-агенты, MCP, автоматизация — гайды" },
-  { q: "нейросети работа",             lang: "ru", region: "RU", angle: "Нейросети в работе — прикладные гайды" },
-  { q: "удаленная работа нейросети",   lang: "ru", region: "RU", angle: "Удалённая работа на нейросетях" },
-  { q: "ai side hustle",               lang: "en", region: "US", angle: "AI side hustle (EN)" },
-  { q: "make money with ai",           lang: "en", region: "US", angle: "Make money with AI (EN)" },
-  { q: "faceless ai channel",          lang: "en", region: "US", angle: "Faceless AI channel (EN)" },
-  { q: "ai automation agency",         lang: "en", region: "US", angle: "AI automation agency (EN)" }
+/** Широкие ключи — общая картина ниши и потолки. */
+const BROAD = [
+  { q: "ии заменит профессии",          angle: "«ИИ заменит профессии» — страх за работу" },
+  { q: "как зарабатывать с помощью ии", angle: "«Как зарабатывать с помощью ИИ» — путь до сервиса" },
+  { q: "заработок в интернете",         angle: "Заработок в интернете — общий денежный запрос" },
+  { q: "ии агенты",                     angle: "ИИ-агенты, MCP, автоматизация — гайды" },
+  { q: "нейросети работа",              angle: "Нейросети в работе — прикладные гайды" },
+  { q: "удаленная работа нейросети",    angle: "Удалённая работа на нейросетях" }
 ];
 
-/** Сколько верхних роликов на ключ считать кандидатами (экономия квоты). */
-const PER_KEYWORD = 6;
+/** Длинные хвосты — узкие запросы, где сидят маленькие каналы. */
+const LONGTAIL = [
+  { q: "нейросети для фриланса",        angle: "Нейросети для фриланса" },
+  { q: "ии для бизнеса автоматизация",  angle: "ИИ для бизнеса — автоматизация" },
+  { q: "нейросеть монтаж видео",        angle: "Монтаж видео на нейросетях" },
+  { q: "заработок на ии без вложений",  angle: "Заработок на ИИ без вложений" },
+  { q: "нейросети для копирайтинга",    angle: "Нейросети для копирайтинга" },
+  { q: "ии ассистент для работы",       angle: "ИИ-ассистент для работы" },
+  { q: "нейросеть создать сайт",        angle: "Сайт на нейросетях" },
+  { q: "промпт инженер обучение",       angle: "Промпт-инжиниринг — обучение" }
+];
+
+/** Англоязычные — опережают рунет на 2–3 месяца. */
+const EN = [
+  { q: "ai side hustle",        angle: "AI side hustle (EN)" },
+  { q: "make money with ai",    angle: "Make money with AI (EN)" },
+  { q: "faceless ai channel",   angle: "Faceless AI channel (EN)" },
+  { q: "ai automation agency",  angle: "AI automation agency (EN)" }
+];
+
+const KEYWORDS = [
+  ...BROAD.map(k => ({ ...k, lang: "ru", region: "RU", orders: ["viewCount", "date"] })),
+  ...LONGTAIL.map(k => ({ ...k, lang: "ru", region: "RU", orders: ["viewCount"] })),
+  ...EN.map(k => ({ ...k, lang: "en", region: "US", orders: ["viewCount"] }))
+];
+
+const MAX_RESULTS = 50;            // поиск стоит одинаково при любом числе — берём максимум
+const MAX_SUBS_FOR_PROFILE = 300000; // медиану считаем только для каналов до этого размера
+const MAX_PROFILES = 220;          // потолок дорогих запросов за прогон
+const MIN_VIEWS_FOR_PROFILE = 3000; // совсем мелочь не считаем
 
 /**
- * Ролик засчитывается, только если в заголовке или описании есть ядро темы ИИ.
- * Без этого фильтра по запросу «ии агенты» приходят ролики про секретных агентов
- * в играх, а по «заработок в интернете» — всё подряд.
- * Слова «агент» и «автоматизация» сами по себе НЕ считаются — они слишком общие.
+ * Ролик засчитывается, только если ядро темы ИИ есть в ЗАГОЛОВКЕ.
+ * По описанию не ищем: там «AI» попадается в шаблонных подписях и рекламе,
+ * из-за чего в выдачу лезут песни, новости и игровые ролики.
  */
 const AI_CORE = new RegExp(
   [
@@ -54,7 +78,7 @@ const AI_CORE = new RegExp(
     "(?:^|[^a-z])sora(?:[^a-z]|$)", "(?:^|[^a-z])veo(?:[^a-z]|$)",
     "(?:^|[^a-z])llm(?:[^a-z]|$)",
     "gigachat", "гигачат", "copilot", "копилот",
-    "промпт", "prompt"
+    "промпт", "prompt", "n8n"
   ].join("|"),
   "i"
 );
@@ -67,8 +91,9 @@ function durationSeconds(iso) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+let quotaSpent = 0;
 
-async function api(path, params, attempt = 0) {
+async function api(path, params, cost, attempt = 0) {
   const u = new URL(API + path);
   u.searchParams.set("key", KEY);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
@@ -76,12 +101,13 @@ async function api(path, params, attempt = 0) {
   const res = await fetch(u);
   if (res.status === 403 || res.status === 429) {
     const body = await res.text();
-    throw new Error(`QUOTA_OR_AUTH ${res.status}: ${body.slice(0, 300)}`);
+    throw new Error(`QUOTA_OR_AUTH ${res.status}: ${body.slice(0, 200)}`);
   }
   if (!res.ok) {
-    if (attempt < 2) { await sleep(1200 * (attempt + 1)); return api(path, params, attempt + 1); }
+    if (attempt < 2) { await sleep(1200 * (attempt + 1)); return api(path, params, cost, attempt + 1); }
     throw new Error(`HTTP ${res.status} на ${path}`);
   }
+  quotaSpent += cost;
   return res.json();
 }
 
@@ -92,47 +118,54 @@ const median = arr => {
   return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
 };
 
-/**
- * Медиана просмотров последних роликов канала + темп публикаций.
- * Темп нужен, чтобы отсеять новостные конвейеры: у канала с десятком роликов
- * в день медиана копеечная, и любая выстрелившая новость даёт множитель ×500,
- * хотя копировать там нечего.
- */
-async function channelProfile(channelId, uploadsId, excludeVideoId, cache) {
-  if (cache.has(channelId)) return cache.get(channelId);
-  let profile = { median: 0, perDay: 0 };
-  try {
-    const pl = await api("/playlistItems", { part: "contentDetails", playlistId: uploadsId, maxResults: 12 });
-    const ids = (pl.items || [])
-      .map(i => i.contentDetails.videoId)
-      .filter(id => id !== excludeVideoId)
-      .slice(0, 10);
-    if (ids.length) {
-      const vs = await api("/videos", { part: "statistics,snippet", id: ids.join(",") });
-      const rows = vs.items || [];
-      const views = rows.map(v => Number(v.statistics.viewCount || 0)).filter(n => n > 0);
-      const dates = rows.map(v => Date.parse(v.snippet.publishedAt)).filter(Boolean).sort((a, b) => b - a);
-      const spanDays = dates.length > 1 ? Math.max(0.5, (dates[0] - dates[dates.length - 1]) / 864e5) : 0;
-      profile = {
-        median: median(views),
-        perDay: spanDays > 0 ? Number((dates.length / spanDays).toFixed(2)) : 0
-      };
+const chunk = (arr, n) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+};
+
+/** Размер канала — дёшево, пачками по 50. */
+async function fetchChannels(ids) {
+  const map = new Map();
+  for (const part of chunk(ids, 50)) {
+    try {
+      const r = await api("/channels", { part: "statistics,contentDetails", id: part.join(",") }, 1);
+      for (const c of r.items || []) map.set(c.id, c);
+    } catch (e) {
+      console.error(`  каналы не получены: ${e.message}`);
+      if (/QUOTA_OR_AUTH/.test(e.message)) throw e;
     }
-  } catch (e) {
-    console.error(`  профиль канала ${channelId} не посчитан: ${e.message}`);
   }
-  cache.set(channelId, profile);
-  return profile;
+  return map;
 }
 
 /**
- * Скачивает превью и кладёт их в поле thumb как data:URI.
- * Один и тот же ролик может быть в нескольких списках — качаем по videoId один раз.
+ * Медиана просмотров канала + темп публикаций.
+ * Темп нужен, чтобы отсеять новостные конвейеры: у канала с десятком роликов
+ * в день медиана копеечная, и любая выстрелившая новость даёт множитель ×500.
  */
+async function channelProfile(uploadsId, excludeVideoId) {
+  const pl = await api("/playlistItems", { part: "contentDetails", playlistId: uploadsId, maxResults: 12 }, 1);
+  const ids = (pl.items || [])
+    .map(i => i.contentDetails.videoId)
+    .filter(id => id !== excludeVideoId)
+    .slice(0, 10);
+  if (!ids.length) return { median: 0, perDay: 0 };
+
+  const vs = await api("/videos", { part: "statistics,snippet", id: ids.join(",") }, 1);
+  const rows = vs.items || [];
+  const views = rows.map(v => Number(v.statistics.viewCount || 0)).filter(n => n > 0);
+  const dates = rows.map(v => Date.parse(v.snippet.publishedAt)).filter(Boolean).sort((a, b) => b - a);
+  const spanDays = dates.length > 1 ? Math.max(0.5, (dates[0] - dates[dates.length - 1]) / 864e5) : 0;
+  return {
+    median: median(views),
+    perDay: spanDays > 0 ? Number((dates.length / spanDays).toFixed(2)) : 0
+  };
+}
+
 async function embedThumbnails(items) {
   const cache = new Map();
   let ok = 0, fail = 0, bytes = 0;
-
   for (const it of items) {
     if (!it || !it.thumbUrl) continue;
     if (cache.has(it.videoId)) { it.thumb = cache.get(it.videoId); continue; }
@@ -145,7 +178,7 @@ async function embedThumbnails(items) {
       it.thumb = uri;
       bytes += buf.length;
       ok++;
-    } catch (e) {
+    } catch {
       cache.set(it.videoId, null);
       it.thumb = null;
       fail++;
@@ -154,130 +187,182 @@ async function embedThumbnails(items) {
   console.error(`превью: ${ok} вшито, ${fail} не удалось, ${(bytes / 1024).toFixed(0)} КБ`);
 }
 
+const tierOf = subs =>
+  subs < 5000 ? "nano" : subs < 50000 ? "small" : subs < 300000 ? "mid" : "big";
+
 async function main() {
   const publishedAfter = new Date(Date.now() - 30 * 864e5).toISOString().replace(/\.\d{3}/, "");
-  const medianCache = new Map();
-  const candidates = [];
-  const ceilings = [];
   const failures = [];
+  const rawById = new Map();   // videoId → сырой результат поиска
+  const ceilings = [];
 
+  // --- Фаза 1: поиск. Собираем как можно шире. ---
   for (const kw of KEYWORDS) {
-    console.error(`ключ: ${kw.q}`);
-    let search;
-    try {
-      search = await api("/search", {
-        q: kw.q, part: "snippet", type: "video", order: "viewCount",
-        maxResults: 10, regionCode: kw.region, relevanceLanguage: kw.lang, publishedAfter
-      });
-    } catch (e) {
-      console.error(`  ПРОПУСК: ${e.message}`);
-      failures.push({ keyword: kw.q, error: e.message });
-      if (/QUOTA_OR_AUTH/.test(e.message)) break;
-      continue;
+    for (const order of kw.orders) {
+      let search;
+      try {
+        search = await api("/search", {
+          q: kw.q, part: "snippet", type: "video", order,
+          maxResults: MAX_RESULTS, regionCode: kw.region,
+          relevanceLanguage: kw.lang, publishedAfter
+        }, 100);
+      } catch (e) {
+        console.error(`  ПРОПУСК «${kw.q}» (${order}): ${e.message}`);
+        failures.push({ keyword: kw.q, order, error: e.message });
+        if (/QUOTA_OR_AUTH/.test(e.message)) { order === order; break; }
+        continue;
+      }
+      for (const i of search.items || []) {
+        const id = i.id?.videoId;
+        if (!id) continue;
+        if (!rawById.has(id)) rawById.set(id, { id, keyword: kw.q, angle: kw.angle, lang: kw.lang });
+      }
     }
-
-    const items = (search.items || []).slice(0, PER_KEYWORD);
-    if (!items.length) { ceilings.push({ angle: kw.angle, keyword: kw.q, ceiling: 0 }); continue; }
-
-    const vids = items.map(i => i.id.videoId);
-    const stats = await api("/videos", { part: "statistics,snippet,contentDetails", id: vids.join(",") });
-    const chIds = [...new Set((stats.items || []).map(v => v.snippet.channelId))];
-    const chData = await api("/channels", { part: "statistics,contentDetails", id: chIds.join(",") });
-    const chMap = new Map((chData.items || []).map(c => [c.id, c]));
-
-    let ceiling = 0;
-
-    for (const v of stats.items || []) {
-      const views = Number(v.statistics.viewCount || 0);
-
-      // Тема должна быть в ЗАГОЛОВКЕ. По описанию не ищем: там «AI» попадается
-      // в шаблонных подписях и рекламе, из-за чего в выдачу лезут песни и новости.
-      if (!AI_CORE.test(v.snippet.title)) continue;
-
-      const durationSec = durationSeconds(v.contentDetails?.duration);
-      const isShort = durationSec > 0 && durationSec <= 90;
-
-      // Язык дорожки. Если он проставлен и это не русский и не английский —
-      // ролик не наш: по запросу «ai side hustle» приходит много контента на хинди.
-      const audio = (v.snippet.defaultAudioLanguage || v.snippet.defaultLanguage || "").toLowerCase();
-      if (audio && !/^(ru|en)/.test(audio)) continue;
-
-      if (views > ceiling) ceiling = views;
-
-      const ch = chMap.get(v.snippet.channelId);
-      if (!ch) continue;
-      const subs = Number(ch.statistics.subscriberCount || 0);
-      const uploads = ch.contentDetails?.relatedPlaylists?.uploads;
-      if (!uploads) continue;
-
-      const prof = await channelProfile(v.snippet.channelId, uploads, v.id, medianCache);
-      const med = prof.median;
-      const mult = med > 0 ? views / med : null;
-
-      candidates.push({
-        videoId: v.id,
-        url: "https://www.youtube.com/watch?v=" + v.id,
-        thumbUrl: v.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
-        title: v.snippet.title,
-        channel: v.snippet.channelTitle,
-        channelId: v.snippet.channelId,
-        subs,
-        views,
-        channelMedian: med,
-        uploadsPerDay: prof.perDay,
-        multiplier: mult ? Number(mult.toFixed(2)) : null,
-        publishedAt: v.snippet.publishedAt,
-        ageDays: Math.max(1, Math.round((Date.now() - Date.parse(v.snippet.publishedAt)) / 864e5)),
-        durationSec,
-        isShort,
-        keyword: kw.q,
-        lang: kw.lang
-      });
-    }
-
-    ceilings.push({ angle: kw.angle, keyword: kw.q, ceiling });
-    await sleep(200);
+    console.error(`ключ: ${kw.q} — всего кандидатов ${rawById.size}`);
+    await sleep(120);
   }
 
-  // Дедупликация по videoId — один ролик может прийти из нескольких ключей.
-  const seen = new Set();
-  const unique = candidates.filter(c => !seen.has(c.videoId) && seen.add(c.videoId));
+  const allIds = [...rawById.keys()];
+  console.error(`\nнайдено уникальных роликов: ${allIds.length}, квота: ${quotaSpent}`);
 
-  // Длинные ролики — канал делает long-form, Shorts копировать нечего.
-  const longform = unique.filter(c => !c.isShort);
+  // --- Фаза 2: статистика роликов, пачками по 50 (1 единица за пачку). ---
+  const videos = [];
+  for (const part of chunk(allIds, 50)) {
+    try {
+      const r = await api("/videos", { part: "statistics,snippet,contentDetails", id: part.join(",") }, 1);
+      videos.push(...(r.items || []));
+    } catch (e) {
+      console.error(`  статистика не получена: ${e.message}`);
+      if (/QUOTA_OR_AUTH/.test(e.message)) break;
+    }
+  }
 
-  // Конвейеры (больше 3 роликов в сутки) из аутлаеров исключаем: их множитель
-  // отражает низкую медиану, а не сильный формат.
-  const outliers = longform
-    .filter(c => c.multiplier !== null && c.multiplier >= 3 && c.uploadsPerDay <= 3)
+  // --- Фаза 3: фильтры по теме, длине и языку. ---
+  const kept = [];
+  const ceilingByKeyword = new Map();
+  for (const v of videos) {
+    const meta = rawById.get(v.id);
+    if (!meta) continue;
+    if (!AI_CORE.test(v.snippet.title)) continue;
+
+    const audio = (v.snippet.defaultAudioLanguage || v.snippet.defaultLanguage || "").toLowerCase();
+    if (audio && !/^(ru|en)/.test(audio)) continue;
+
+    const durationSec = durationSeconds(v.contentDetails?.duration);
+    const isShort = durationSec > 0 && durationSec <= 90;
+    const views = Number(v.statistics.viewCount || 0);
+
+    const prev = ceilingByKeyword.get(meta.keyword);
+    if (!prev || views > prev.ceiling) {
+      ceilingByKeyword.set(meta.keyword, { angle: meta.angle, keyword: meta.keyword, ceiling: views });
+    }
+    if (isShort) continue;
+
+    kept.push({
+      videoId: v.id,
+      url: "https://www.youtube.com/watch?v=" + v.id,
+      thumbUrl: v.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
+      title: v.snippet.title,
+      channel: v.snippet.channelTitle,
+      channelId: v.snippet.channelId,
+      views,
+      publishedAt: v.snippet.publishedAt,
+      ageDays: Math.max(1, Math.round((Date.now() - Date.parse(v.snippet.publishedAt)) / 864e5)),
+      durationSec,
+      keyword: meta.keyword,
+      lang: meta.lang
+    });
+  }
+  ceilings.push(...ceilingByKeyword.values());
+  console.error(`после фильтров осталось: ${kept.length}, квота: ${quotaSpent}`);
+
+  // --- Фаза 4: размер каналов — дёшево, для всех. ---
+  const chIds = [...new Set(kept.map(k => k.channelId))];
+  let chMap = new Map();
+  try {
+    chMap = await fetchChannels(chIds);
+  } catch (e) {
+    failures.push({ stage: "channels", error: e.message });
+  }
+  for (const k of kept) {
+    const ch = chMap.get(k.channelId);
+    k.subs = ch ? Number(ch.statistics.subscriberCount || 0) : 0;
+    k.uploadsPlaylist = ch?.contentDetails?.relatedPlaylists?.uploads || null;
+    k.tier = tierOf(k.subs);
+    k.viewsPerSub = k.subs > 0 ? Number((k.views / k.subs).toFixed(2)) : null;
+  }
+  console.error(`каналов опрошено: ${chIds.length}, квота: ${quotaSpent}`);
+
+  // --- Фаза 5: медиана — только для небольших каналов, по убыванию перспективности. ---
+  const profileQueue = kept
+    .filter(k => k.uploadsPlaylist && k.subs > 0 &&
+                 k.subs <= MAX_SUBS_FOR_PROFILE && k.views >= MIN_VIEWS_FOR_PROFILE)
+    .sort((a, b) => (b.viewsPerSub || 0) - (a.viewsPerSub || 0));
+
+  const seenChannel = new Map();
+  let profiles = 0;
+  for (const k of profileQueue) {
+    if (profiles >= MAX_PROFILES) break;
+    try {
+      if (!seenChannel.has(k.channelId)) {
+        seenChannel.set(k.channelId, await channelProfile(k.uploadsPlaylist, k.videoId));
+        profiles++;
+      }
+      const p = seenChannel.get(k.channelId);
+      k.channelMedian = p.median;
+      k.uploadsPerDay = p.perDay;
+      k.multiplier = p.median > 0 ? Number((k.views / p.median).toFixed(2)) : null;
+    } catch (e) {
+      console.error(`  профиль ${k.channelId}: ${e.message}`);
+      if (/QUOTA_OR_AUTH/.test(e.message)) break;
+    }
+  }
+  console.error(`медиан посчитано: ${profiles}, квота: ${quotaSpent}`);
+
+  // --- Фаза 6: срезы. ---
+  const withMult = kept.filter(k => k.multiplier != null && (k.uploadsPerDay ?? 0) <= 3);
+
+  const outliers = withMult
+    .filter(k => k.multiplier >= 3)
     .sort((a, b) => b.multiplier - a.multiplier);
 
-  // Сигнал первого приоритета: маленький канал, большие просмотры, свежее.
-  const priority = longform.filter(c =>
-    c.subs > 0 && c.subs < 20000 && c.views > 200000 && c.ageDays <= 21
-  ).sort((a, b) => b.views - a.views);
+  // Ракеты: маленький канал, непропорциональный охват. Главный срез для копирования.
+  const rockets = kept
+    .filter(k => k.subs > 0 && k.subs < 50000 && k.views >= 5000 && k.viewsPerSub >= 2)
+    .sort((a, b) => b.viewsPerSub - a.viewsPerSub);
+
+  const byTier = {
+    nano: kept.filter(k => k.tier === "nano").length,
+    small: kept.filter(k => k.tier === "small").length,
+    mid: kept.filter(k => k.tier === "mid").length,
+    big: kept.filter(k => k.tier === "big").length
+  };
 
   const out = {
     scannedAt: new Date().toISOString(),
     publishedAfter,
-    keywordsScanned: KEYWORDS.length - failures.length,
+    keywordsScanned: KEYWORDS.length - new Set(failures.map(f => f.keyword)).size,
+    searchesRun: KEYWORDS.reduce((n, k) => n + k.orders.length, 0),
+    videosScanned: allIds.length,
+    videosKept: kept.length,
+    profilesComputed: profiles,
+    quotaSpent,
+    byTier,
     failures,
-    ok: failures.length < KEYWORDS.length && unique.length > 0,
+    ok: kept.length > 0,
     ceilings: ceilings.sort((a, b) => b.ceiling - a.ceiling),
-    outliers: outliers.slice(0, 10),
-    priority: priority.slice(0, 5),
-    // Группировка по тому, каким ключом ролик найден, а не по языку самого ролика:
-    // из-за автодубляжа YouTube англоязычные каналы приходят и по русским запросам.
-    byRuKeywords: longform.filter(c => c.lang === "ru").sort((a, b) => b.views - a.views).slice(0, 8),
-    byEnKeywords: longform.filter(c => c.lang === "en").sort((a, b) => b.views - a.views).slice(0, 8)
+    rockets: rockets.slice(0, 12),
+    outliers: outliers.slice(0, 12),
+    byRuKeywords: kept.filter(k => k.lang === "ru").sort((a, b) => b.views - a.views).slice(0, 8),
+    byEnKeywords: kept.filter(k => k.lang === "en").sort((a, b) => b.views - a.views).slice(0, 8)
   };
 
-  // Превью вшиваем в страницу base64-строкой: у артефактов строгий CSP,
-  // внешние картинки с i.ytimg.com там просто не загрузятся.
-  await embedThumbnails([...out.outliers, ...out.priority, ...out.byRuKeywords, ...out.byEnKeywords]);
+  // Превью вшиваем base64: у артефактов строгий CSP, внешние картинки не загрузятся.
+  await embedThumbnails([...out.rockets, ...out.outliers, ...out.byRuKeywords, ...out.byEnKeywords]);
 
   process.stdout.write(JSON.stringify(out, null, 2));
-  console.error(`\nготово: ${unique.length} роликов, ${outliers.length} аутлаеров, ${failures.length} сбоев`);
+  console.error(`\nготово. Просмотрено ${allIds.length}, оставлено ${kept.length}, ` +
+    `ракет ${rockets.length}, аутлаеров ${outliers.length}, квота ${quotaSpent}/10000`);
 }
 
 main().catch(e => {
