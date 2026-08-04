@@ -83,6 +83,38 @@ const AI_CORE = new RegExp(
   "i"
 );
 
+/**
+ * Заявленный доход в заголовке: «$400,784.99», «$60K/Month», «50 000 ₽», «Rs 50,000».
+ * Такой ролик держится на числе, а число — это доказательство, которого у нас нет.
+ * Копировать нельзя: без результата получится враньё, а враньё в этой нише уже выжгло
+ * запрос «как заработать на нейросетях» до нескольких тысяч просмотров.
+ */
+const MONEY_CLAIM = new RegExp(
+  [
+    "\\$\\s?\\d",
+    "\\d[\\d\\s.,]*\\s?(?:₽|руб|rub)",
+    "\\brs\\.?\\s?\\d",
+    "\\d+\\s?k\\s?\\/?\\s?(?:month|mo|мес)",
+    "\\d+\\s?(?:тыс|млн)\\.?\\s?(?:₽|руб|в месяц|за месяц)",
+    "\\d+\\s?(?:долларов|тысяч долларов)"
+  ].join("|"),
+  "i"
+);
+
+/** Многочасовой курс: повторить можно, но это месяцы работы, а не формат. */
+const COURSE = /full course|полный курс|crash course|мастер-?класс|masterclass|курс\s+(?:по|за)\b|\bbootcamp\b/i;
+const COURSE_SECONDS = 5400; // 90 минут
+
+/**
+ * Повторяемость формата. Это эвристика по заголовку и длине, а не приговор:
+ * ролик с пометкой claim может быть отличным, просто его нельзя копировать в лоб.
+ */
+function repeatability(title, durationSec) {
+  if (MONEY_CLAIM.test(title)) return "claim";
+  if (COURSE.test(title) || durationSec > COURSE_SECONDS) return "course";
+  return "repeatable";
+}
+
 /** ISO 8601 (PT1H2M3S) → секунды. */
 function durationSeconds(iso) {
   const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso || "");
@@ -269,6 +301,7 @@ async function main() {
       publishedAt: v.snippet.publishedAt,
       ageDays: Math.max(1, Math.round((Date.now() - Date.parse(v.snippet.publishedAt)) / 864e5)),
       durationSec,
+      repeatability: repeatability(v.snippet.title, durationSec),
       keyword: meta.keyword,
       lang: meta.lang
     });
@@ -327,9 +360,14 @@ async function main() {
     .sort((a, b) => b.multiplier - a.multiplier);
 
   // Ракеты: маленький канал, непропорциональный охват. Главный срез для копирования.
+  // Повторяемые идут первыми: ролик с суммой в заголовке держится на числе,
+  // а не на формате, и копировать его без такого же результата нечестно и бесполезно.
+  const rankRep = r => (r === "repeatable" ? 0 : r === "course" ? 1 : 2);
   const rockets = kept
     .filter(k => k.subs > 0 && k.subs < 50000 && k.views >= 5000 && k.viewsPerSub >= 2)
-    .sort((a, b) => b.viewsPerSub - a.viewsPerSub);
+    .sort((a, b) =>
+      rankRep(a.repeatability) - rankRep(b.repeatability) ||
+      b.viewsPerSub - a.viewsPerSub);
 
   const byTier = {
     nano: kept.filter(k => k.tier === "nano").length,
@@ -348,6 +386,11 @@ async function main() {
     profilesComputed: profiles,
     quotaSpent,
     byTier,
+    byRepeatability: {
+      repeatable: kept.filter(k => k.repeatability === "repeatable").length,
+      course: kept.filter(k => k.repeatability === "course").length,
+      claim: kept.filter(k => k.repeatability === "claim").length
+    },
     failures,
     ok: kept.length > 0,
     ceilings: ceilings.sort((a, b) => b.ceiling - a.ceiling),

@@ -128,6 +128,16 @@
   .vtitle { font-size: 14px; font-weight: 600; line-height: 1.35; margin: 0; }
   .vorig { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); line-height: 1.35; opacity: .85; }
   .vchan { font-size: 12.5px; color: var(--ink-soft); }
+  .repchip {
+    align-self: flex-start; font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: 2px 7px; border: 1px solid currentColor; white-space: nowrap;
+  }
+  .repchip.repeatable { color: var(--good); }
+  .repchip.course { color: var(--warn); }
+  .repchip.claim { color: var(--dead); }
+  .vcard.dim .vthumb img { opacity: .55; }
+  .vcard.dim .vtitle { font-weight: 550; }
   .vstats {
     margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--line);
     font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft);
@@ -236,7 +246,8 @@
         <div class="sec-head">
           <p class="sec-kicker">01 — Кого копировать</p>
           <h2>Ракеты: маленькие каналы с большим охватом</h2>
-          <p class="sec-note">Главный раздел. Здесь каналы до 50 тысяч подписчиков, чьи ролики собрали кратно больше, чем канал по размеру мог бы вытянуть. На плашке — просмотров на подписчика: это отношение показывает чистую силу формата, потому что бренда у такого канала ещё нет. Именно эти ролики повторяемы без бюджета и без имени.</p>
+          <p class="sec-note">Каналы до 50 тысяч подписчиков, чьи ролики собрали кратно больше, чем канал по размеру мог бы вытянуть. На плашке — просмотров на подписчика: бренда у такого канала ещё нет, значит сработал чистый формат.</p>
+          <p class="sec-note">Сверху идут <b>повторяемые</b>. Ниже, приглушённые, — те, что копировать в лоб нельзя. <b>«Держится на сумме»</b> — ролик работает за счёт числа в заголовке, а число это доказательство, которого у тебя нет: повторить его можно только вместе с результатом, иначе получится то самое инфоцыганство, которое выжгло запрос «как заработать на нейросетях». <b>«Курс»</b> — повторимо, но это месяцы работы, там выигрывает полнота, а не формат.</p>
         </div>
         <div class="vgrid" id="rockets-grid"></div>
       </section>
@@ -491,9 +502,18 @@ function vcard(o, mode) {
   }
   if (o.channelMedian) stats.push('<span>медиана ' + short(o.channelMedian) + '</span>');
 
-  return '<a class="vcard" href="' + esc(o.url) + '" target="_blank" rel="noopener noreferrer">' +
+  const REP = {
+    repeatable: ["repeatable", "повторяемо"],
+    course: ["course", "курс"],
+    claim: ["claim", "держится на сумме"]
+  };
+  const rep = REP[o.repeatability];
+  const chip = rep ? '<span class="repchip ' + rep[0] + '">' + rep[1] + '</span>' : '';
+  const dim = o.repeatability && o.repeatability !== "repeatable" ? " dim" : "";
+
+  return '<a class="vcard' + dim + '" href="' + esc(o.url) + '" target="_blank" rel="noopener noreferrer">' +
     '<div class="vthumb">' + img + badge + '<span class="age">' + esc(days(o.ageDays)) + '</span></div>' +
-    '<div class="vbody">' +
+    '<div class="vbody">' + chip +
       '<p class="vtitle">' + esc(o.titleRu || o.title) + '</p>' +
       (o.titleRu ? '<span class="vorig">' + esc(o.title) + '</span>' : '') +
       '<span class="vchan">' + esc(o.channel) + ' · ' + short(o.subs) + ' подписчиков</span>' +
